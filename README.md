@@ -119,6 +119,20 @@ let mux = TouchMultiplexer::builder()
     .build(touchscreen)?;
 ```
 
+### Polling instead of blind delay
+
+As an alternative to a fixed delay, the builder can poll the virtual device's evdev node to verify it was created:
+
+```rust
+use std::time::Duration;
+
+let mux = TouchMultiplexer::builder()
+    .startup_check(20, Duration::from_millis(50))  // 20 retries, 50ms apart
+    .build(touchscreen)?;
+```
+
+This returns as soon as the device is ready (faster on fast boots) and fails explicitly if the device never appears. When `startup_check` is set, the blind `startup_delay` is skipped.
+
 ### Do not create multiple devices
 
 A common mistake is creating a new `TouchMultiplexer` for each touch action. This is wrong — each creation triggers a new 1 second delay and a new device registration cycle. Create **one** multiplexer at startup and reuse it:
