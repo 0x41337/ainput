@@ -22,11 +22,11 @@ adb shell -t 'su -c "/data/local/tmp/android_tui"'   # -t is required for TUI
 ## Architecture
 
 - `src/device.rs` — scans `/dev/input/event*`, scores and selects the best direct MT-B touchscreen
-- `src/multiplexer.rs` — reads physical events, maintains slot state, emits complete MT-B frames
+- `src/multiplexer.rs` — reads physical events, maintains slot state, emits complete MT-B frames; `TouchMultiplexer::builder()` provides a startup delay to avoid Android device registration race
 - `src/uinput.rs` — creates/manages the virtual uinput touchscreen with matching capabilities
 - `src/touch.rs` — high-level `TouchController` with pluggable `TouchProfile` trait
 - `src/human.rs` — `HumanProfile` implementing `TouchProfile` with configurable delays
-- `src/lib.rs` — public API: `TouchDevice`, `TouchMultiplexer`, `Point`, `DisplaySize`, `TouchController`, `HumanProfile`, `TouchAction`
+- `src/lib.rs` — public API: `TouchDevice`, `TouchMultiplexer`, `TouchMultiplexerBuilder`, `Point`, `DisplaySize`, `TouchController`, `HumanProfile`, `TouchAction`
 - `src/main.rs` — TUI binary using ratatui
 
 ## Tests

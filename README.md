@@ -57,7 +57,7 @@ use ainput::{Point, TouchDevice, TouchMultiplexer};
 
 fn main() -> std::io::Result<()> {
     let touchscreen = TouchDevice::detect()?;
-    let mut mux = TouchMultiplexer::open(touchscreen)?;
+    let mut mux = TouchMultiplexer::builder().build(touchscreen)?;
 
     // Move virtual touch
     mux.touch_move(Point::new(360, 800))?;
@@ -82,7 +82,7 @@ use ainput::touch::TouchController;
 
 fn main() -> std::io::Result<()> {
     let touchscreen = TouchDevice::detect()?;
-    let mux = TouchMultiplexer::open(touchscreen)?;
+    let mux = TouchMultiplexer::builder().build(touchscreen)?;
 
     let profile = HumanProfile::new()
         .with_down_delay(Duration::from_millis(50))
@@ -101,12 +101,57 @@ fn main() -> std::io::Result<()> {
 
 You can implement `TouchProfile` for custom behaviors (jitter, multi-step gestures, etc.).
 
+## Android startup delay
+
+On Android, there is a race between the kernel creating the `uinput` virtual device and Android's `InputReader` finishing its registration. Events sent before registration completes are silently lost.
+
+`TouchMultiplexer::builder()` handles this with a **1 second startup delay** by default — applied once after the virtual device is created. This is sufficient for most devices.
+
+### If 1 second is not enough
+
+If virtual touches are still not registered, increase the delay:
+
+```rust
+use std::time::Duration;
+
+let mux = TouchMultiplexer::builder()
+    .startup_delay(Duration::from_secs(2))
+    .build(touchscreen)?;
+```
+
+### Do not create multiple devices
+
+A common mistake is creating a new `TouchMultiplexer` for each touch action. This is wrong — each creation triggers a new 1 second delay and a new device registration cycle. Create **one** multiplexer at startup and reuse it:
+
+```rust
+// Correct: one multiplexer, many touches
+let mut mux = TouchMultiplexer::builder().build(touchscreen)?;
+
+mux.touch_down(Point::new(360, 800))?;
+mux.touch_up()?;
+
+// ... later ...
+
+mux.touch_down(Point::new(500, 1000))?;
+mux.touch_up()?;
+```
+
+```rust
+// Wrong: new multiplexer per touch
+for pos in positions {
+    let mut mux = TouchMultiplexer::builder().build(touchscreen.clone())?;  // race every time
+    mux.touch_down(pos)?;
+    mux.touch_up()?;
+}
+```
+
 ## Examples
 
 | Example | Description |
 |---------|-------------|
 | `android_tui` | Interactive TUI for testing touch injection |
 | `android_press_center` | Presses the center of the screen for 3 seconds |
+| `human_press` | Press with human-like delays (down/up) |
 
 Run locally (if you have a Linux touchscreen):
 
