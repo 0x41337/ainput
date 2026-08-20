@@ -14,6 +14,7 @@ fn main() -> io::Result<()> {
     println!("[2] Creating multiplexer...");
 
     let multiplexer = TouchMultiplexer::builder()
+        .startup_check(20, Duration::from_millis(50))
         .build(device)?;
 
     let display = multiplexer.display_size();

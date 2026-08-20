@@ -198,7 +198,9 @@ fn main() -> io::Result<()> {
 
     println!("[detect] {}", touchscreen.summary());
 
-    let mut mux = TouchMultiplexer::open(touchscreen)?;
+    let mut mux = TouchMultiplexer::builder()
+        .startup_check(20, Duration::from_millis(50))
+        .build(touchscreen)?;
 
     if let Some(path) = mux.output_evdev_path() {
         println!("[uinput] {}", path.display());
