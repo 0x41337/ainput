@@ -657,3 +657,118 @@ impl Drop for VirtualTouchscreen {
         let _ = self.handle.dev_destroy();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::device::TouchDeviceError;
+
+    #[test]
+    fn output_slot_default() {
+        let slot = OutputSlot::default();
+        assert!(!slot.active);
+        assert_eq!(slot.tracking_id, None);
+        assert_eq!(slot.x, 0);
+        assert_eq!(slot.y, 0);
+        assert_eq!(slot.touch_major, 0);
+        assert_eq!(slot.width_major, 0);
+    }
+
+    #[test]
+    fn output_slot_partial_eq() {
+        let a = OutputSlot {
+            active: true,
+            tracking_id: Some(42),
+            x: 100,
+            y: 200,
+            touch_major: 10,
+            width_major: 5,
+        };
+        let b = OutputSlot {
+            active: true,
+            tracking_id: Some(42),
+            x: 100,
+            y: 200,
+            touch_major: 10,
+            width_major: 5,
+        };
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn output_slot_not_equal() {
+        let a = OutputSlot {
+            active: true,
+            tracking_id: Some(42),
+            x: 100,
+            y: 200,
+            touch_major: 0,
+            width_major: 0,
+        };
+        let b = OutputSlot {
+            active: true,
+            tracking_id: Some(43),
+            x: 100,
+            y: 200,
+            touch_major: 0,
+            width_major: 0,
+        };
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn output_slot_clone() {
+        let a = OutputSlot {
+            active: true,
+            tracking_id: Some(7),
+            x: 500,
+            y: 1200,
+            touch_major: 20,
+            width_major: 10,
+        };
+        let b = a;
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn uinput_error_display_invalid_slot() {
+        let err = UInputError::InvalidSlot {
+            slot: 5,
+            slot_count: 3,
+        };
+        let msg = format!("{err}");
+        assert!(msg.contains("5"));
+        assert!(msg.contains("3"));
+    }
+
+    #[test]
+    fn uinput_error_display_active_without_tracking() {
+        let err = UInputError::ActiveSlotWithoutTrackingId { slot: 2 };
+        let msg = format!("{err}");
+        assert!(msg.contains("2"));
+        assert!(msg.contains("tracking_id"));
+    }
+
+    #[test]
+    fn uinput_error_display_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        let err = UInputError::Io(io_err);
+        let msg = format!("{err}");
+        assert!(msg.contains("not found"));
+    }
+
+    #[test]
+    fn uinput_error_is_std_error() {
+        let err = UInputError::InvalidSlot {
+            slot: 0,
+            slot_count: 0,
+        };
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn touch_device_error_is_std_error() {
+        let err = TouchDeviceError::NoTouchscreen;
+        let _: &dyn std::error::Error = &err;
+    }
+}

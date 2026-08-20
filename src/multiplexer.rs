@@ -560,3 +560,80 @@ fn display_to_raw(
         + (((value - display_min) as i64 * (raw_max - raw_min) as i64)
             / (display_max - display_min) as i64) as i32
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_to_raw_identity() {
+        assert_eq!(display_to_raw(500, 0, 1000, 0, 1000), 500);
+    }
+
+    #[test]
+    fn display_to_raw_scaled() {
+        assert_eq!(display_to_raw(0, 0, 719, 0, 1079), 0);
+        assert_eq!(display_to_raw(719, 0, 719, 0, 1079), 1079);
+        assert_eq!(display_to_raw(360, 0, 719, 0, 1079), 540);
+    }
+
+    #[test]
+    fn display_to_raw_different_offsets() {
+        assert_eq!(display_to_raw(5, 0, 10, 100, 200), 150);
+        assert_eq!(display_to_raw(0, 0, 10, 100, 200), 100);
+        assert_eq!(display_to_raw(10, 0, 10, 100, 200), 200);
+    }
+
+    #[test]
+    fn display_to_raw_clamps_value() {
+        assert_eq!(display_to_raw(-5, 0, 100, 0, 1000), 0);
+        assert_eq!(display_to_raw(200, 0, 100, 0, 1000), 1000);
+    }
+
+    #[test]
+    fn display_to_raw_equal_display_range() {
+        assert_eq!(display_to_raw(5, 10, 10, 0, 1000), 0);
+    }
+
+    #[test]
+    fn display_to_raw_reversed_ranges() {
+        assert_eq!(display_to_raw(0, 0, 100, 1000, 0), 1000);
+        assert_eq!(display_to_raw(100, 0, 100, 1000, 0), 0);
+        assert_eq!(display_to_raw(50, 0, 100, 1000, 0), 500);
+    }
+
+    #[test]
+    fn display_size_default() {
+        let ds = DisplaySize::default();
+        assert_eq!(ds.width, 720);
+        assert_eq!(ds.height, 1600);
+    }
+
+    #[test]
+    fn display_size_new() {
+        let ds = DisplaySize::new(1080, 2400);
+        assert_eq!(ds.width, 1080);
+        assert_eq!(ds.height, 2400);
+    }
+
+    #[test]
+    fn point_new() {
+        let p = Point::new(100, 200);
+        assert_eq!(p.x, 100);
+        assert_eq!(p.y, 200);
+    }
+
+    #[test]
+    fn point_copy() {
+        let p1 = Point::new(10, 20);
+        let p2 = p1;
+        assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn display_size_copy() {
+        let d1 = DisplaySize::new(100, 200);
+        let d2 = d1;
+        assert_eq!(d1, d2);
+    }
+}

@@ -494,3 +494,126 @@ impl TouchDevice {
         Device::open(&self.path).map_err(TouchDeviceError::Io)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn axis_range_len() {
+        assert_eq!(AxisRange::new(0, 0).len(), 1);
+        assert_eq!(AxisRange::new(0, 10).len(), 11);
+        assert_eq!(AxisRange::new(5, 9).len(), 5);
+        assert_eq!(AxisRange::new(-3, 3).len(), 7);
+    }
+
+    #[test]
+    fn touch_device_error_display_no_touchscreen() {
+        let err = TouchDeviceError::NoTouchscreen;
+        let msg = format!("{err}");
+        assert!(msg.contains("no compatible"));
+    }
+
+    #[test]
+    fn touch_device_error_display_invalid_device() {
+        let err = TouchDeviceError::InvalidDevice {
+            path: PathBuf::from("/dev/input/event3"),
+            reason: "missing ABS_MT_SLOT".to_string(),
+        };
+        let msg = format!("{err}");
+        assert!(msg.contains("/dev/input/event3"));
+        assert!(msg.contains("missing ABS_MT_SLOT"));
+    }
+
+    #[test]
+    fn touch_device_error_display_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let err = TouchDeviceError::Io(io_err);
+        let msg = format!("{err}");
+        assert!(msg.contains("denied"));
+    }
+
+    #[test]
+    fn looks_virtual_name_tokens() {
+        assert!(TouchDevice::looks_virtual("uinput-mapper", &PathBuf::from("/dev/input/event0")));
+        assert!(TouchDevice::looks_virtual("Virtual touchscreen", &PathBuf::from("/dev/input/event0")));
+        assert!(TouchDevice::looks_virtual("Touch Injector", &PathBuf::from("/dev/input/event0")));
+        assert!(TouchDevice::looks_virtual("virtio-input", &PathBuf::from("/dev/input/event0")));
+    }
+
+    #[test]
+    fn looks_virtual_path_tokens() {
+        assert!(!TouchDevice::looks_virtual("Goodix Touchscreen", &PathBuf::from("/dev/input/event5")));
+        assert!(TouchDevice::looks_virtual("Touchscreen", &PathBuf::from("/dev/uinput/event0")));
+        assert!(TouchDevice::looks_virtual("Touchscreen", &PathBuf::from("/dev/input/virtual/event0")));
+    }
+
+    #[test]
+    fn looks_virtual_no_match() {
+        assert!(!TouchDevice::looks_virtual("ELAN Touchscreen", &PathBuf::from("/dev/input/event3")));
+        assert!(!TouchDevice::looks_virtual("Synaptics", &PathBuf::from("/dev/input/event7")));
+    }
+
+    #[test]
+    fn looks_virtual_case_insensitive() {
+        assert!(TouchDevice::looks_virtual("UINPUT mapper", &PathBuf::from("/dev/input/event0")));
+        assert!(TouchDevice::looks_virtual("Touchscreen", &PathBuf::from("/dev/UINPUT/event0")));
+    }
+
+    #[test]
+    fn summary_format() {
+        let device = TouchDevice {
+            path: PathBuf::from("/dev/input/event5"),
+            name: "Test Touch".to_string(),
+            slot_range: AxisRange::new(0, 9),
+            x_range: AxisRange::new(0, 1079),
+            y_range: AxisRange::new(0, 2339),
+            tracking_id_range: AxisRange::new(0, 65535),
+            touch_major_range: None,
+            width_major_range: None,
+            has_btn_touch: true,
+            has_btn_tool_finger: false,
+            direct: true,
+            score: 115,
+        };
+        let s = device.summary();
+        assert!(s.contains("/dev/input/event5"));
+        assert!(s.contains("Test Touch"));
+        assert!(s.contains("slots=10"));
+        assert!(s.contains("X=0..1079"));
+        assert!(s.contains("Y=0..2339"));
+        assert!(s.contains("score=115"));
+    }
+
+    #[test]
+    fn getter_methods() {
+        let device = TouchDevice {
+            path: PathBuf::from("/dev/input/event1"),
+            name: "Dev".to_string(),
+            slot_range: AxisRange::new(0, 4),
+            x_range: AxisRange::new(0, 1919),
+            y_range: AxisRange::new(0, 1079),
+            tracking_id_range: AxisRange::new(0, 32767),
+            touch_major_range: Some(OptionalAxisRange { min: 0, max: 255 }),
+            width_major_range: None,
+            has_btn_touch: true,
+            has_btn_tool_finger: true,
+            direct: true,
+            score: 130,
+        };
+
+        assert_eq!(device.path(), Path::new("/dev/input/event1"));
+        assert_eq!(device.name(), "Dev");
+        assert_eq!(device.slot_count(), 5);
+        assert_eq!(device.x_range(), AxisRange::new(0, 1919));
+        assert_eq!(device.y_range(), AxisRange::new(0, 1079));
+        assert_eq!(device.tracking_id_range(), AxisRange::new(0, 32767));
+        assert_eq!(device.touch_major_range(), Some(OptionalAxisRange { min: 0, max: 255 }));
+        assert_eq!(device.width_major_range(), None);
+        assert!(device.has_btn_touch());
+        assert!(device.has_btn_tool_finger());
+        assert!(device.is_direct());
+        assert_eq!(device.score(), 130);
+    }
+}
