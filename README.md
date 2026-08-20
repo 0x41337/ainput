@@ -1,7 +1,5 @@
 # ainput
 
-A Rust library for multiplexing physical and virtual touches on Android touchscreens.
-
 `ainput` captures a physical touchscreen via `EVIOCGRAB`, creates a virtual `uinput` device, and multiplexes both physical and virtual contacts into a single stream. This allows injecting touch events while preserving the original touch input.
 
 ## Features
@@ -18,6 +16,11 @@ A Rust library for multiplexing physical and virtual touches on Android touchscr
 - **cargo-ndk**: for cross-compiling to Android (`cargo install cargo-ndk`)
 - **NDK**: install via `sdkmanager "ndk;27.0.12077973"` or Android Studio
 - **adb**: with a connected device that has root (`su`)
+
+## Install 
+```
+cargo add --git https://github.com/0x41337/ainput
+```
 
 ## Cross-compiling for Android
 
