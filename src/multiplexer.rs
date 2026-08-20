@@ -1,5 +1,5 @@
 use std::io;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use evdev::{Device, EventType};
 
@@ -65,6 +65,49 @@ struct SlotState {
     width_major: i32,
 }
 
+/// Builder for [`TouchMultiplexer`].
+///
+/// Allows configuring the display dimension and the startup delay
+/// before the multiplexer is ready.
+///
+/// # Startup delay
+///
+/// On Android, there is a race between the kernel creating the
+/// `uinput` device and the `InputReader` registering it. Events
+/// sent before registration is complete are silently lost.
+///
+/// The builder defaults to a 1 second delay to cover this gap.
+/// Use [`TouchMultiplexerBuilder::startup_delay`] to override.
+pub struct TouchMultiplexerBuilder {
+    display_size: DisplaySize,
+    startup_delay: Duration,
+}
+
+impl TouchMultiplexerBuilder {
+    /// Sets the logical display dimension.
+    pub fn display_size(mut self, display_size: DisplaySize) -> Self {
+        self.display_size = display_size;
+        self
+    }
+
+    /// Sets the delay applied after the virtual device is created.
+    ///
+    /// This gives Android time to register the device before
+    /// the first event is sent.
+    ///
+    /// The default is 1 second. Pass `Duration::ZERO` to disable.
+    pub fn startup_delay(mut self, delay: Duration) -> Self {
+        self.startup_delay = delay;
+        self
+    }
+
+    /// Creates the multiplexer, blocking for the configured
+    /// startup delay.
+    pub fn build(self, touchscreen: TouchDevice) -> io::Result<TouchMultiplexer> {
+        TouchMultiplexer::open_impl(touchscreen, self.display_size, self.startup_delay)
+    }
+}
+
 /// Multiplexes physical and virtual contacts on a single
 /// `uinput` touchscreen device.
 ///
@@ -93,16 +136,43 @@ pub struct TouchMultiplexer {
 }
 
 impl TouchMultiplexer {
-    /// Opens a multiplexer using the default `720x1600` dimension.
+    /// Returns a builder for configuring the multiplexer.
+    ///
+    /// The builder applies a default 100 ms startup delay to
+    /// avoid a race between the kernel creating the virtual device
+    /// and Android's `InputReader` registering it.
+    pub fn builder() -> TouchMultiplexerBuilder {
+        TouchMultiplexerBuilder {
+            display_size: DisplaySize::default(),
+            startup_delay: Duration::from_secs(1),
+        }
+    }
+
+    /// Opens a multiplexer using the default `720x1600` dimension
+    /// and no startup delay.
+    ///
+    /// Prefer [`builder`](Self::builder) on Android to avoid
+    /// the device registration race.
     pub fn open(touchscreen: TouchDevice) -> io::Result<Self> {
         Self::open_with_display_size(touchscreen, DisplaySize::default())
     }
 
     /// Opens the multiplexer with an explicitly provided
-    /// logical display dimension.
+    /// logical display dimension and no startup delay.
+    ///
+    /// Prefer [`builder`](Self::builder) on Android to avoid
+    /// the device registration race.
     pub fn open_with_display_size(
         touchscreen: TouchDevice,
         display_size: DisplaySize,
+    ) -> io::Result<Self> {
+        Self::open_impl(touchscreen, display_size, Duration::ZERO)
+    }
+
+    fn open_impl(
+        touchscreen: TouchDevice,
+        display_size: DisplaySize,
+        startup_delay: Duration,
     ) -> io::Result<Self> {
         if display_size.width <= 0 || display_size.height <= 0 {
             return Err(io::Error::other("invalid display dimension"));
@@ -142,6 +212,13 @@ impl TouchMultiplexer {
                 return Err(io::Error::other(error));
             }
         };
+
+        /*
+         * Gives Android time to register the device.
+         */
+        if !startup_delay.is_zero() {
+            std::thread::sleep(startup_delay);
+        }
 
         Ok(Self {
             device,

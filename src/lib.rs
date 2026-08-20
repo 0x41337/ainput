@@ -8,7 +8,7 @@ pub use device::{AxisRange, OptionalAxisRange, TouchDevice, TouchDeviceError};
 
 pub use human::HumanProfile;
 
-pub use multiplexer::{DisplaySize, Point, TouchMultiplexer};
+pub use multiplexer::{DisplaySize, Point, TouchMultiplexer, TouchMultiplexerBuilder};
 
 pub use touch::{TouchAction, TouchContext, TouchController, TouchProfile};
 
