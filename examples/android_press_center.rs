@@ -15,7 +15,8 @@ fn main() -> io::Result<()> {
     /*
      * Creates the multiplexer.
      */
-    let mut touch = TouchMultiplexer::open(device)?;
+    let mut touch = TouchMultiplexer::builder()
+        .build(device)?;
 
     let display = touch.display_size();
 
