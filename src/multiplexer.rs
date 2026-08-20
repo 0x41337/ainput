@@ -78,9 +78,18 @@ struct SlotState {
 ///
 /// The builder defaults to a 1 second delay to cover this gap.
 /// Use [`TouchMultiplexerBuilder::startup_delay`] to override.
+///
+/// # Startup check
+///
+/// As an alternative to a blind delay, the builder can poll the
+/// virtual device's evdev node to verify it was created by the
+/// kernel. This is faster when the device is ready early and
+/// avoids wasting time when it is not.
 pub struct TouchMultiplexerBuilder {
     display_size: DisplaySize,
     startup_delay: Duration,
+    startup_check_retries: Option<u32>,
+    startup_check_delay: Duration,
 }
 
 impl TouchMultiplexerBuilder {
@@ -96,15 +105,50 @@ impl TouchMultiplexerBuilder {
     /// the first event is sent.
     ///
     /// The default is 1 second. Pass `Duration::ZERO` to disable.
+    /// Ignored when [`startup_check`](Self::startup_check) is set.
     pub fn startup_delay(mut self, delay: Duration) -> Self {
         self.startup_delay = delay;
         self
     }
 
+    /// Enables polling for the virtual device's evdev node.
+    ///
+    /// When set, the builder polls up to `retries` times with
+    /// `delay` between attempts. Each attempt tries to open the
+    /// virtual device's `/dev/input/eventX` node. If all attempts
+    /// fail, construction returns an error.
+    ///
+    /// When enabled, the blind `startup_delay` is skipped.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use std::time::Duration;
+    /// use ainput::{TouchDevice, TouchMultiplexer};
+    ///
+    /// # fn example(touchscreen: TouchDevice) -> std::io::Result<()> {
+    /// let mux = TouchMultiplexer::builder()
+    ///     .startup_check(20, Duration::from_millis(50))
+    ///     .build(touchscreen)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn startup_check(mut self, retries: u32, delay: Duration) -> Self {
+        self.startup_check_retries = Some(retries);
+        self.startup_check_delay = delay;
+        self
+    }
+
     /// Creates the multiplexer, blocking for the configured
-    /// startup delay.
+    /// startup delay or startup check.
     pub fn build(self, touchscreen: TouchDevice) -> io::Result<TouchMultiplexer> {
-        TouchMultiplexer::open_impl(touchscreen, self.display_size, self.startup_delay)
+        TouchMultiplexer::open_impl(
+            touchscreen,
+            self.display_size,
+            self.startup_delay,
+            self.startup_check_retries,
+            self.startup_check_delay,
+        )
     }
 }
 
@@ -138,13 +182,15 @@ pub struct TouchMultiplexer {
 impl TouchMultiplexer {
     /// Returns a builder for configuring the multiplexer.
     ///
-    /// The builder applies a default 100 ms startup delay to
+    /// The builder applies a default 1 second startup delay to
     /// avoid a race between the kernel creating the virtual device
     /// and Android's `InputReader` registering it.
     pub fn builder() -> TouchMultiplexerBuilder {
         TouchMultiplexerBuilder {
             display_size: DisplaySize::default(),
             startup_delay: Duration::from_secs(1),
+            startup_check_retries: None,
+            startup_check_delay: Duration::from_millis(50),
         }
     }
 
@@ -166,13 +212,21 @@ impl TouchMultiplexer {
         touchscreen: TouchDevice,
         display_size: DisplaySize,
     ) -> io::Result<Self> {
-        Self::open_impl(touchscreen, display_size, Duration::ZERO)
+        Self::open_impl(
+            touchscreen,
+            display_size,
+            Duration::ZERO,
+            None,
+            Duration::ZERO,
+        )
     }
 
     fn open_impl(
         touchscreen: TouchDevice,
         display_size: DisplaySize,
         startup_delay: Duration,
+        startup_check_retries: Option<u32>,
+        startup_check_delay: Duration,
     ) -> io::Result<Self> {
         if display_size.width <= 0 || display_size.height <= 0 {
             return Err(io::Error::other("invalid display dimension"));
@@ -214,9 +268,14 @@ impl TouchMultiplexer {
         };
 
         /*
-         * Gives Android time to register the device.
+         * Startup readiness.
+         *
+         * If a check is configured, poll the virtual device's
+         * evdev node. Otherwise fall back to the blind delay.
          */
-        if !startup_delay.is_zero() {
+        if let Some(retries) = startup_check_retries {
+            Self::wait_until_ready(&output, retries, startup_check_delay)?;
+        } else if !startup_delay.is_zero() {
             std::thread::sleep(startup_delay);
         }
 
@@ -296,6 +355,46 @@ impl TouchMultiplexer {
     /// evdev path of the virtual touchscreen.
     pub fn output_evdev_path(&self) -> Option<std::path::PathBuf> {
         self.output.evdev_path()
+    }
+
+    /// Polls the virtual device's evdev node until it can be opened.
+    ///
+    /// This verifies the kernel created the device. It does **not**
+    /// guarantee Android's `InputReader` has finished registering it.
+    fn wait_until_ready(
+        output: &VirtualTouchscreen,
+        retries: u32,
+        delay: Duration,
+    ) -> io::Result<()> {
+        let path = output
+            .evdev_path()
+            .ok_or_else(|| io::Error::other("virtual device has no evdev path"))?;
+
+        for attempt in 1..=retries {
+            std::thread::sleep(delay);
+
+            match evdev::Device::open(&path) {
+                Ok(_device) => {
+                    return Ok(());
+                }
+
+                Err(_) if attempt < retries => {
+                    continue;
+                }
+
+                Err(error) => {
+                    return Err(io::Error::other(format!(
+                        "virtual device not ready after {} attempts: {}",
+                        retries, error,
+                    )));
+                }
+            }
+        }
+
+        Err(io::Error::other(format!(
+            "virtual device not ready after {} attempts",
+            retries,
+        )))
     }
 
     /// Processes currently available physical events.
