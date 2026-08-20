@@ -9,6 +9,7 @@
 - **Virtual touch injection**:  add a virtual contact alongside physical ones
 - **Stateful MT-B protocol**: correctly reconstructs slot state per frame
 - **TUI**: built-in terminal UI for testing and debugging
+- **Human profiles**: configurable delays for DOWN, MOVE, and UP to simulate realistic touch behavior
 
 ## Prerequisites
 
@@ -49,6 +50,8 @@ adb shell -t 'su -c "/data/local/tmp/android_tui"'
 
 ## Usage as a library
 
+### Basic
+
 ```rust
 use ainput::{Point, TouchDevice, TouchMultiplexer};
 
@@ -66,6 +69,37 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 ```
+
+### With human profile
+
+`TouchController` wraps the multiplexer and applies a `TouchProfile` to every action. `HumanProfile` adds configurable delays to simulate realistic touch timing.
+
+```rust
+use std::time::Duration;
+use ainput::{Point, TouchDevice, TouchMultiplexer};
+use ainput::human::HumanProfile;
+use ainput::touch::TouchController;
+
+fn main() -> std::io::Result<()> {
+    let touchscreen = TouchDevice::detect()?;
+    let mux = TouchMultiplexer::open(touchscreen)?;
+
+    let profile = HumanProfile::new()
+        .with_down_delay(Duration::from_millis(50))
+        .with_move_delay(Duration::from_millis(10))
+        .with_up_delay(Duration::from_millis(30));
+
+    let mut ctrl = TouchController::new(mux, profile);
+
+    ctrl.touch_down(Point::new(360, 800))?;
+    ctrl.touch_move(Point::new(400, 850))?;
+    ctrl.touch_up()?;
+
+    Ok(())
+}
+```
+
+You can implement `TouchProfile` for custom behaviors (jitter, multi-step gestures, etc.).
 
 ## Examples
 
@@ -109,3 +143,5 @@ Physical touchscreen ──> EVIOCGRAB ──> ainput ──> Virtual uinput dev
 1. **Detection** (`device.rs`) — scans `/dev/input/event*` for direct MT-B touchscreens, scores candidates, and selects the best one
 2. **Multiplexer** (`multiplexer.rs`) — reads physical events, maintains slot state, and emits complete MT-B frames to the virtual device
 3. **Virtual device** (`uinput.rs`) — creates and manages the `uinput` touchscreen with matching capabilities
+4. **Touch controller** (`touch.rs`) — high-level API with pluggable `TouchProfile` trait for action processing
+5. **Human profile** (`human.rs`) — `TouchProfile` implementation with configurable delays for realistic behavior

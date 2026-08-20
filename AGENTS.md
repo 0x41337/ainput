@@ -24,8 +24,16 @@ adb shell -t 'su -c "/data/local/tmp/android_tui"'   # -t is required for TUI
 - `src/device.rs` — scans `/dev/input/event*`, scores and selects the best direct MT-B touchscreen
 - `src/multiplexer.rs` — reads physical events, maintains slot state, emits complete MT-B frames
 - `src/uinput.rs` — creates/manages the virtual uinput touchscreen with matching capabilities
-- `src/lib.rs` — public API: `TouchDevice`, `TouchMultiplexer`, `Point`, `DisplaySize`
+- `src/touch.rs` — high-level `TouchController` with pluggable `TouchProfile` trait
+- `src/human.rs` — `HumanProfile` implementing `TouchProfile` with configurable delays
+- `src/lib.rs` — public API: `TouchDevice`, `TouchMultiplexer`, `Point`, `DisplaySize`, `TouchController`, `HumanProfile`, `TouchAction`
 - `src/main.rs` — TUI binary using ratatui
+
+## Tests
+
+```bash
+cargo test   # 60 unit tests (device, multiplexer, uinput, touch, human)
+```
 
 ## Environment
 
@@ -34,5 +42,4 @@ adb shell -t 'su -c "/data/local/tmp/android_tui"'   # -t is required for TUI
 ## Conventions
 
 - `deploy-n-run.sh` is a local convenience script (gitignored). Do not commit it.
-- No test suite currently exists.
 - Edition 2024 features are in use.
